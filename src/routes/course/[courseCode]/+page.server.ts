@@ -2,47 +2,36 @@ import { db } from "$lib/server/db";
 import { eq } from "drizzle-orm";
 import type { PageServerLoad } from "./$types";
 import { courses, grades, modules } from "$lib/server/db/schema";
-import { error } from "console";
-
+// 1. FIXED: Correct SvelteKit error import
+import { error } from "@sveltejs/kit"; 
+import type { PopulatedCourseData } from "../../../types/course";
 type FetchCourseData = {
     courseCode: string;
     moduleCode: string;
-    courseTitle:{
-        en: string;
-        sv: string;
-    },
-    examtitle: {
-        en: string;
-        sv: string;
-    },
+    courseTitle: { en: string; sv: string; };
+    examtitle: { en: string; sv: string; };
     examinationDate: string;
-    grades: {
-        grade: string;
-        gradeOrder: number;
-        quantity: number;
-    }[]
+    grades: { grade: string; gradeOrder: number; quantity: number; }[]
 }
 
 export const load: PageServerLoad = async ({ params }) => {
     const { courseCode } = params;
+    
     if (!courseCode) {
-        error("Course code is missing in URL parameters.");
+        error(400, "Course code is missing in URL parameters.");
     }
+    
     let courseData = await db.query.courses.findFirst({
         where: eq(courses.courseCode, courseCode.toUpperCase()),
-        with: {
-            modules: {
-                with: {
-                    grades: true
-                }
-            }
-        }
+        with: { modules: { with: { grades: true } } }
     });
 
     if (!courseData) {
-        error("Course not found: " + courseCode);
+        error(404, "Course not found: " + courseCode);
     }
-    if(!courseData?.titleEn) {
+
+    // Cache miss: We need to fetch from LiU API
+    if (!courseData?.titleEn) {
         const parms = {
             method: 'GET',
             headers: {
@@ -53,14 +42,21 @@ export const load: PageServerLoad = async ({ params }) => {
                 'content-type': 'application/json',
                 'Ocp-Apim-Subscription-Key': process.env.LIU_API_KEY || ''
             }
-        }
-        const res = await fetch(`https://api.liu.se/education/ExamStatistics/${courseCode}?limit=1000`, parms)
+        };
+        
+        const res = await fetch(`https://api.liu.se/education/ExamStatistics/${courseCode}?limit=1000`, parms);
 
-        if(!res.ok) {
-            error("Failed to fetch course data: " + res.statusText);
+        if (!res.ok) {
+            error(500, "Failed to fetch course data: " + res.statusText);
         }
 
         const apiCourseData = await res.json() as FetchCourseData[];
+        
+        // If API returns empty, the course exists but has no exam data
+        if (apiCourseData.length === 0) {
+            error(404, "No exam statistics found for this course.");
+        }
+
         const formatedData = {
             titleEn: apiCourseData[0].courseTitle.en,
             titleSv: apiCourseData[0].courseTitle.sv,
@@ -75,12 +71,15 @@ export const load: PageServerLoad = async ({ params }) => {
                     quantity: grade.quantity
                 }))
             }))
-        }
+        };
+
+        // Update the course title
         await db.update(courses).set({
             titleEn: formatedData.titleEn,
             titleSv: formatedData.titleSv
         }).where(eq(courses.courseCode, courseCode.toUpperCase()));
 
+        // Safely insert modules and grades
         for (const module of formatedData.modules) {
             const [dbModule] = await db.insert(modules).values({
                 courseCode: courseCode.toUpperCase(),
@@ -97,40 +96,19 @@ export const load: PageServerLoad = async ({ params }) => {
                 quantity: g.quantity
              }));
 
-            await db.insert(grades).values(gradesToInsert);
+            if (gradesToInsert.length > 0) {
+                await db.insert(grades).values(gradesToInsert);
+            }
         }
 
         courseData = await db.query.courses.findFirst({
             where: eq(courses.courseCode, courseCode.toUpperCase()),
-            with: {
-                modules: {
-                    with: {
-                        grades: true
-                    }
-                }
-            }
+            with: { modules: { with: { grades: true } } }
         });
     }
 
     if (!courseData) {
-        error("Course data is still missing after API fetch: " + courseCode);
-    }
-
-    type PopulatedCourseData = {
-        courseCode: string;
-        titleEn: string;
-        titleSv: string;
-        modules: {
-            moduleCode: string;
-            examTitleEn: string;
-            examTitleSv: string;
-            examinationDate: string;
-            grades: {
-                grade: string;
-                gradeOrder: number;
-                quantity: number;
-            }[];
-        }[];
+        error(500, "Course data is still missing after API fetch: " + courseCode);
     }
 
     return {

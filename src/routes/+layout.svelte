@@ -51,7 +51,7 @@
 		</button>
     </nav>
 
-    <main class="flex-grow w-full max-w-5xl mx-auto px-6">
+    <main class="grow w-full max-w-5xl mx-auto px-6">
         {@render children()}
     </main>
 

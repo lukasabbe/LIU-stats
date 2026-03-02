@@ -121,6 +121,27 @@
   body {
     @apply bg-background text-foreground;
   }
+  :root {
+    /* ... your existing light mode shadcn variables ... */
+    
+    /* Add these Unovis light mode mappings */
+    --vis-tooltip-background-color: hsl(var(--card));
+    --vis-tooltip-text-color: hsl(var(--card-foreground));
+    --vis-tooltip-border-color: hsl(var(--border));
+    --vis-crosshair-line-stroke-color: hsl(var(--border));
+    --vis-axis-tick-label-color: hsl(var(--muted-foreground));
+  }
+
+  .dark {
+    /* ... your existing dark mode shadcn variables ... */
+    
+    /* Add these Unovis dark mode mappings */
+    --vis-tooltip-background-color: hsl(var(--card));
+    --vis-tooltip-text-color: hsl(var(--card-foreground));
+    --vis-tooltip-border-color: hsl(var(--border));
+    --vis-crosshair-line-stroke-color: hsl(var(--border));
+    --vis-axis-tick-label-color: hsl(var(--muted-foreground));
+  }
 }
 
 body {
@@ -128,4 +149,12 @@ body {
   transition: background-color var(--transition-speed) var(--transition-timing),
               color var(--transition-speed) var(--transition-timing),
               border-color var(--transition-speed) var(--transition-timing);
+}
+
+
+.vis-tooltip {
+    outline: none !important;
+    padding: 0.25rem !important;
+    border-radius: 0.5rem !important;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.2) !important;
 }
